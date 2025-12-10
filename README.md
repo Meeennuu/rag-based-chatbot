@@ -47,7 +47,7 @@ pip install -r requirements.txt
 Create a .env file in the project root:
 
 HUGGINGFACEHUB_API_TOKEN=your_huggingface_token_here
-HF_MODEL_ID=google/gemma-1.1-2b-it
+HF_MODEL_ID=HuggingFaceH4/zephyr-7b-beta
 
 You can generate a token here:
 👉 https://huggingface.co/settings/tokens
