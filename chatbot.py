@@ -1,4 +1,5 @@
-# chatbot.py
+#chatbot.py
+#→ User types a question → retrieve top chunks → build a prompt with “Knowledge” → send to Hugging Face model → show answer in Gradio UI.
 
 import os
 from dotenv import load_dotenv
@@ -98,3 +99,4 @@ if __name__ == "__main__":
         server_name="127.0.0.1",  
         server_port=7860        
     )
+
