@@ -95,7 +95,6 @@ chat_ui = gr.ChatInterface(
 
 if __name__ == "__main__":
     chat_ui.launch(
-        server_name="0.0.0.0",  # listen on all network interfaces
-        server_port=7860        # fixed port
+        server_name="127.0.0.1",  
+        server_port=7860        
     )
-
