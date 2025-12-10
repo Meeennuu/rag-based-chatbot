@@ -22,11 +22,15 @@ Option to host on your local network
 
 **📁 Project Structure**
 rag-based-chatbot/
-│
-├── chatbot.py              # Main Gradio chatbot script
-├── ingest_database.py      # Script to build FAISS vector index from PDFs
-├── requirements.txt        # Python dependencies
-├── NIPS-2017-attention-is-all-you-need-Paper.pdf   # Sample PDF
+
+├── chatbot.py
+
+├── ingest_database.py  
+
+├── requirements.txt  
+
+├── NIPS-2017-attention-is-all-you-need-Paper.pdf 
+
 └── (FAISS index is created after ingestion)
 
 **🛠 Installation & Setup**
