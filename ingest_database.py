@@ -1,4 +1,5 @@
 # ingest_database.py
+# Reads PDFs → splits into chunks → converts to embeddings → saves FAISS index.
 
 import os
 from dotenv import load_dotenv
@@ -38,3 +39,4 @@ vector_store = FAISS.from_documents(chunks, embeddings_model)
 vector_store.save_local(FAISS_PATH)
 
 print("✅ Ingestion complete. FAISS index saved to:", FAISS_PATH)
+
