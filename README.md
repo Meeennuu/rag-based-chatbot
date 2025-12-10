@@ -3,8 +3,11 @@
 This project is a Retrieval-Augmented Generation (RAG) chatbot that answers questions strictly based on the content of PDF documents. It uses:
 
 -FAISS for vector search
+
 -Sentence Transformers for embeddings
+
 -Hugging Face LLM models for natural language generation
+
 -Gradio for an interactive chat UI
 
 This chatbot guarantees accurate, context-specific answers and avoids hallucinations.
