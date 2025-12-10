@@ -30,6 +30,7 @@ rag-based-chatbot/
 └── (FAISS index is created after ingestion)
 
 **🛠 Installation & Setup**
+
 1️⃣ Clone the repository
 git clone https://github.com/Meeennuu/rag-based-chatbot.git
 cd rag-based-chatbot
@@ -46,8 +47,7 @@ pip install -r requirements.txt
 Create a .env file in the project root:
 
 HUGGINGFACEHUB_API_TOKEN=your_huggingface_token_here
-HF_MODEL_ID=microsoft/Phi-3-mini-4k-instruct
-
+HF_MODEL_ID=google/gemma-1.1-2b-it
 
 You can generate a token here:
 👉 https://huggingface.co/settings/tokens
