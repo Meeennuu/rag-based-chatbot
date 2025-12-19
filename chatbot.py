@@ -1,6 +1,3 @@
-#chatbot.py
-#→ User types a question → retrieve top chunks → build a prompt with “Knowledge” → send to Hugging Face model → show answer in Gradio UI.
-
 import os
 from dotenv import load_dotenv
 import gradio as gr
@@ -10,39 +7,61 @@ from langchain_huggingface import (
     HuggingFaceEndpoint,
     HuggingFaceEmbeddings,
 )
+
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 
-# Load env vars
+
+# -------------------------
+# Load Environment Variables
+# -------------------------
 load_dotenv()
-
-# configuration
-DATA_PATH = "data"
-FAISS_PATH = "faiss_index"
-
 HF_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-HF_MODEL_ID = os.getenv("HF_MODEL_ID", "HuggingFaceH4/zephyr-7b-beta")
+HF_MODEL_ID = os.getenv("HF_MODEL_ID", "meta-llama/Llama-3.1-8B-Instruct")
 
-# 1. Embeddings (must be same as in ingest_database.py)
+# Embedding model
 embeddings_model = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
-# 2. Load FAISS vector store
-vector_store = FAISS.load_local(
-    FAISS_PATH,
-    embeddings_model,
-    allow_dangerous_deserialization=True,  # safe if it's your own index
-)
 
-# Set up retriever (similar to original code)
-num_results = 5
-retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+# -------------------------
+# Build VectorStore from PDFs
+# -------------------------
+def build_vectorstore(files):
+    docs = []
 
-# 3. Hugging Face chat model (Inference API)
+    print("📄 Received Files:", files)
+
+    for f in files:
+        print("➡ Loading:", f)
+        loader = PyPDFLoader(f)  # IMPORTANT FIX
+        pages = loader.load()
+        docs.extend(pages)
+
+    print("📄 Total pages loaded:", len(docs))
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=300,
+        chunk_overlap=80
+    )
+
+    chunks = splitter.split_documents(docs)
+    print("🔍 Chunks created:", len(chunks))
+
+    vs = FAISS.from_documents(chunks, embeddings_model)
+    return vs
+
+
+# -------------------------
+# LLM Endpoint (HuggingFace)
+# -------------------------
 llm_endpoint = HuggingFaceEndpoint(
     repo_id=HF_MODEL_ID,
     task="text-generation",
-    max_new_tokens=512,
+    max_new_tokens=300,
+    temperature=0.1,
     do_sample=False,
     huggingfacehub_api_token=HF_TOKEN,
 )
@@ -50,53 +69,114 @@ llm_endpoint = HuggingFaceEndpoint(
 chat_model = ChatHuggingFace(llm=llm_endpoint)
 
 
-# 4. This function is called for every user message
-def answer(message, history):
-    # 1. Retrieve relevant chunks from FAISS
-    docs = retriever.invoke(message)
+# -------------------------
+# RAG Answer Function
+# -------------------------
+def answer_question(question, vs):
+    print("🔎 Query:", question)
 
-    # 2. Join them into a single "knowledge" text
+    docs = vs.similarity_search(question, k=3)
+    print("📚 Retrieved docs:", len(docs))
+
     knowledge = "\n\n".join(doc.page_content for doc in docs)
 
-    # 3. Simple, strict RAG prompt
-    rag_prompt = f"""
-You are an assistant that answers questions strictly based on the provided knowledge.
+    prompt = f"""
+You are an expert assistant that answers questions ONLY using the information inside <knowledge>.  
+
+Your goal is to produce a **highly detailed, well-structured, multi-paragraph explanation** that stays 100% faithful to the source text.
 
 Rules:
-- Use ONLY the text in the "Knowledge" section.
-- If the answer is not clearly in the knowledge, say: "I don't know from the given notes."
-- Answer in simple, clear English, like a human tutor.
-- Keep the answer short (4–6 sentences).
+1. Use ONLY the knowledge provided. Do NOT add outside information.  
+2. If the answer is NOT found in the knowledge, reply:  
+   "The document does not contain this information."  
+3. When the answer exists, produce:  
+   • A clear overview  
+   • Deep explanation  
+   • Step-by-step details  
+   • Important concepts and definitions  
+   • Examples, if found  
+4. Write in a **rich, detailed, student-friendly style**.
 
-Knowledge:
+<knowledge>
 {knowledge}
+</knowledge>
 
-Question: {message}
+Question: {question}
 
-Answer:
-""".strip()
+Now produce a detailed answer:
+"""
 
-    # 4. Call the Hugging Face chat model
-    response = chat_model.invoke(rag_prompt)
+    # ChatHuggingFace requires messages format
+    result = chat_model.invoke([
+        {"role": "user", "content": prompt}
+    ])
 
-    # 5. Return only the text answer
-    return response.content.strip()
+    return result.content.strip()
+
+# -------------------------
+# Build Knowledge Base
+# -------------------------
+def build_knowledge(files):
+    if not files:
+        return None, "⚠ Please upload at least one PDF."
+
+    vs = build_vectorstore(files)
+    return vs, "✅ Knowledge Base Created Successfully!"
 
 
-# 5. Gradio ChatInterface (almost same as tutorial)
-chat_ui = gr.ChatInterface(
-    fn=answer,
-    textbox=gr.Textbox(
-        placeholder="Ask something about the PDF...",
-        container=False,
-        autoscroll=True,
-        scale=7,
-    ),
-)
+# -------------------------
+# Chat Function
+# -------------------------
+def chat_fn(message, history, vs):
+    print("💬 Chat called.")
 
-if __name__ == "__main__":
-    chat_ui.launch(
-        server_name="127.0.0.1",  
-        server_port=7860        
+    if vs is None:
+        history.append((message, "❌ No knowledge base found. Upload PDFs and click Build."))
+        return history, ""
+
+    answer = answer_question(message, vs)
+
+    # GRADIO CHATBOT FORMAT → list of (user, bot) tuples
+    history.append({"role": "user", "content": message})
+    history.append({"role": "assistant", "content": answer})
+
+    return history, ""
+
+
+# -------------------------
+# Gradio UI
+# -------------------------
+with gr.Blocks() as demo:
+
+    gr.Markdown("## 📚 RAG Chatbot — Upload PDFs and Ask Questions")
+
+    files = gr.File(file_count="multiple", file_types=[".pdf"])
+    build_btn = gr.Button("Build Knowledge Base")
+
+    status = gr.Markdown()
+    vs_state = gr.State(None)
+
+    chatbot = gr.Chatbot()
+    msg_box = gr.Textbox(placeholder="Ask something...")
+
+    # Build vectorstore
+    build_btn.click(
+        build_knowledge,
+        inputs=[files],
+        outputs=[vs_state, status],
     )
+
+    # Chat callback
+    msg_box.submit(
+        chat_fn,
+        inputs=[msg_box, chatbot, vs_state],
+        outputs=[chatbot, msg_box],
+    )
+
+
+# -------------------------
+# Run app
+# -------------------------
+if __name__ == "__main__":
+    demo.launch(server_name="127.0.0.1", server_port=7861)
 
